@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VN Stocks">
-<title>VN Stock Tracker</title>
+<title>VN Stock Tracker v8</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -322,7 +322,7 @@ function pt(ms){return new Promise((_,r)=>setTimeout(()=>r(new Error('timeout'))
 async function fTCBS(tk){
   const to=Math.floor(Date.now()/1000)+86400;
   const r=await Promise.race([
-    fetch(`https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${tk}&type=stock&resolution=D&to=${to}&countBack=25`),
+    fetch(`https://proxy.corsfix.com/?https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${tk}&type=stock&resolution=D&to=${to}&countBack=25`),
     pt(8000)
   ]);
   if(!r.ok)throw 0;
@@ -335,7 +335,7 @@ async function fTCBS(tk){
 async function fDNSE(tk){
   const to=Math.floor(Date.now()/1000)+86400,fr=to-35*86400;
   const r=await Promise.race([
-    fetch(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fr}&to=${to}&symbol=${tk}&resolution=D`,{headers:{Origin:'https://entrade.com.vn',Referer:'https://entrade.com.vn/'}}),
+    fetch(`https://proxy.corsfix.com/?https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fr}&to=${to}&symbol=${tk}&resolution=D`,{headers:{Origin:'https://entrade.com.vn',Referer:'https://entrade.com.vn/'}}),
     pt(8000)
   ]);
   if(!r.ok)throw 0;
@@ -346,7 +346,7 @@ async function fDNSE(tk){
 }
 async function fSSI(tk){
   const r=await Promise.race([
-    fetch(`https://iboard-query.ssi.com.vn/v2/stock/historical-price/${tk}/1D/25/1`,{headers:{Referer:'https://iboard.ssi.com.vn',Origin:'https://iboard.ssi.com.vn'}}),
+    fetch(`https://proxy.corsfix.com/?https://iboard-query.ssi.com.vn/v2/stock/historical-price/${tk}/1D/25/1`,{headers:{Referer:'https://iboard.ssi.com.vn',Origin:'https://iboard.ssi.com.vn'}}),
     pt(8000)
   ]);
   if(!r.ok)throw 0;
@@ -455,7 +455,7 @@ async function refresh(){
   document.getElementById('sb').textContent=`Hoàn tất — ${liveN} mã live · ${errN} giữ giá tĩnh`;
   document.getElementById('ln').textContent=liveN>0?`✓${liveN} live`:'';
   if(liveN>0)toast(`✅ ${liveN}/${stocks.length} mã đã cập nhật giá thực`,'ok');
-  else toast('⚠️ Không lấy được giá — cần host trên https://','warn');
+  else toast('⚠️ Không lấy được giá — thử lại sau','warn');
 }
 
 // ═══════════════════════════════════════════════
@@ -478,7 +478,7 @@ function toast(msg,type=''){
 }
 window.addEventListener('load',()=>{
   render();
-  toast('📋 Giá tĩnh 17/03 — Cần host trên https:// để cập nhật thực');
+  toast('📋 Giá tĩnh 17/03 — Bấm CẬP NHẬT để lấy giá thực');
 });
 </script>
 </body>
