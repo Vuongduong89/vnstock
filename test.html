@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Endpoint Finder</title>
+<style>
+body{background:#070c12;color:#e0eaf4;font-family:monospace;padding:12px;font-size:11px}
+h2{color:#00c8ff;margin-bottom:4px;font-size:13px}
+.sub{color:#3d5a78;font-size:10px;margin-bottom:8px}
+button{background:#0077aa;color:#fff;border:none;border-radius:8px;
+  padding:11px 14px;font-size:12px;font-weight:700;cursor:pointer;width:100%;margin-bottom:6px}
+button:active{opacity:.7}
+button.sec{background:#0d1720;border:1px solid #1a2d42;color:#e0eaf4}
+#log{background:#0d1720;border:1px solid #1a2d42;border-radius:8px;padding:10px;
+  white-space:pre-wrap;word-break:break-all;height:62vh;overflow-y:auto;font-size:10.5px;line-height:1.6}
+.ok{color:#00e096}.err{color:#ff4560}.info{color:#60a5fa}.warn{color:#f0b429}.sep{color:#3d5a78}
+</style>
+</head>
+<body>
+<h2>🔍 Endpoint Finder — ACB</h2>
+<div class="sub">Tìm endpoint TCBS và SSI đang hoạt động năm 2025</div>
+<button onclick="findAll()">▶ TÌM TẤT CẢ ENDPOINT</button>
+<button class="sec" onclick="testDNSEDate()">📅 Test DNSE theo ngày cụ thể</button>
+<div id="log">Bấm TÌM TẤT CẢ ENDPOINT...
+</div>
+
+<script>
+const PROXY = 'https://vnstock.monosake02.workers.dev/?url=';
+const el = document.getElementById('log');
+function log(msg, cls='') {
+  const s = document.createElement('span');
+  if(cls) s.className = cls;
+  s.textContent = msg + '\n';
+  el.appendChild(s); el.scrollTop = el.scrollHeight;
+}
+
+async function tryUrl(label, url) {
+  log('\n[' + label + ']', 'info');
+  log(url.slice(0,80)+'...', 'sep');
+  try {
+    const r = await fetch(PROXY + encodeURIComponent(url));
+    const txt = await r.text();
+    log('HTTP: ' + r.status + ' | Size: '+txt.length+'b', r.ok?'ok':'err');
+    if (txt.length > 5 && txt.length < 10000) {
+      log('Data: ' + txt.slice(0,200), r.ok?'ok':'warn');
+    }
+    if (r.ok && txt.includes('"close"') || txt.includes('"c":') || txt.includes('priceClose')) {
+      log('✅ FOUND WORKING ENDPOINT!', 'ok');
+      return true;
+    }
+    return false;
+  } catch(e) {
+    log('❌ ' + e.message, 'err');
+    return false;
+  }
+}
+
+async function findAll() {
+  el.innerHTML = '';
+  const to = Math.floor(Date.now()/1000) + 86400;
+  const fr = to - 30*86400;
+  const today = new Date().toISOString().split('T')[0];
+  const past = new Date(Date.now()-30*86400000).toISOString().split('T')[0];
+
+  log('=== TÌM ENDPOINT TCBS ===', 'info');
+  log('Đang test các URL TCBS...', 'sep');
+  
+  const tcbsUrls = [
+    ['TCBS v1 bars', `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=ACB&type=stock&resolution=D&to=${to}&countBack=5`],
+    ['TCBS v2 bars', `https://apipubaws.tcbs.com.vn/stock-insight/v2/stock/bars-long-term?ticker=ACB&type=stock&resolution=D&to=${to}&countBack=5`],
+    ['TCBS price-history', `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/price-history?ticker=ACB&resolution=D&from=${fr}&to=${to}`],
+    ['TCBS trading', `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/trading?ticker=ACB`],
+    ['TCBS intraday', `https://apipubaws.tcbs.com.vn/stock-insight/v1/intraday/ACB/investor/his/paging?page=0&size=5&headIndex=-1`],
+    ['TCBS quote', `https://apipubaws.tcbs.com.vn/stock-insight/v1/finance/ACB/dividend`],
+  ];
+  
+  for (const [label, url] of tcbsUrls) {
+    await tryUrl(label, url);
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  log('\n=== TÌM ENDPOINT SSI ===', 'info');
+  
+  const ssiUrls = [
+    ['SSI historical v2 /25/1', `https://iboard-query.ssi.com.vn/v2/stock/historical-price/ACB/1D/25/1`],
+    ['SSI historical v2 /20/1', `https://iboard-query.ssi.com.vn/v2/stock/historical-price/ACB/1D/20/1`],
+    ['SSI chart v1', `https://iboard-query.ssi.com.vn/v1/chart/history?symbol=ACB&resolution=D&from=${fr}&to=${to}`],
+    ['SSI price v2', `https://iboard-query.ssi.com.vn/v2/market/securities/ACB`],
+    ['SSI iboard quote', `https://iboard.ssi.com.vn/cong-cu-tai-chinh/ACB`],
+  ];
+  
+  for (const [label, url] of ssiUrls) {
+    await tryUrl(label, url);
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  log('\n=== TÌM ENDPOINT KHÁC ===', 'info');
+  
+  const otherUrls = [
+    ['Cafef price', `https://s.cafef.vn/Ajax/PageNew/DataHistory/PriceHistory.ashx?Symbol=ACB&StartDate=&EndDate=&PageIndex=1&PageSize=5`],
+    ['Vietstock price', `https://finance.vietstock.vn/data/getdatatickerhistory?code=ACB&fromDate=${past}&toDate=${today}&type=D`],
+    ['DNSE v1', `https://services.entrade.com.vn/chart-api/v1/ohlcs/stock?from=${fr}&to=${to}&symbol=ACB&resolution=D`],
+    ['DNSE chart', `https://services.entrade.com.vn/chart-api/chart?symbol=ACB&resolution=D&from=${fr}&to=${to}`],
+  ];
+  
+  for (const [label, url] of otherUrls) {
+    await tryUrl(label, url);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  log('\n=== XONG ===', 'info');
+}
+
+async function testDNSEDate() {
+  el.innerHTML = '';
+  log('=== TEST DNSE VỚI NGÀY CỤ THỂ ===', 'info');
+  log('DNSE trả rỗng vì from/to có thể cần unix timestamp khác\n', 'warn');
+  
+  // Test với các khoảng thời gian khác nhau  
+  const tests = [
+    // [from, to, label]
+    [1735689600, 1742169600, '2025-01-01 to 2025-03-17 (timestamp)'],
+    [1709251200, 1742169600, '2024-03-01 to 2025-03-17 (timestamp)'],
+  ];
+  
+  for (const [fr, to, label] of tests) {
+    await tryUrl('DNSE ' + label,
+      `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fr}&to=${to}&symbol=ACB&resolution=D`);
+    await new Promise(r => setTimeout(r, 500));
+  }
+  
+  // Test với string date
+  await tryUrl('DNSE string date',
+    `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=2025-01-01&to=2025-03-17&symbol=ACB&resolution=D`);
+}
+</script>
+
+</body>
+</html>
