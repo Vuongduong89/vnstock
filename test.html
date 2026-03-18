@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Test</title>
+<style>
+body{background:#070c12;color:#e0eaf4;font-family:monospace;padding:16px;font-size:12px}
+h2{color:#00c8ff;margin-bottom:12px}
+button{background:#0077aa;color:#fff;border:none;border-radius:8px;padding:10px 14px;
+  font-size:12px;font-weight:700;cursor:pointer;width:100%;margin-bottom:6px;text-align:left}
+button:active{opacity:.7}
+#log{background:#0d1720;border:1px solid #1a2d42;border-radius:8px;padding:12px;
+  white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;
+  font-size:11px;line-height:1.6;margin-top:8px}
+.ok{color:#00e096}.err{color:#ff4560}.info{color:#60a5fa}.warn{color:#f0b429}
+</style>
+</head>
+<body>
+<h2>🔧 API Test — GitHub Pages</h2>
+<button onclick="t('yahoo1')">1. Yahoo Finance q1 (ACB.VN)</button>
+<button onclick="t('yahoo2')">2. Yahoo Finance q2 (ACB.VN)</button>
+<button onclick="t('stooq')">3. Stooq (acb.vn)</button>
+<button onclick="t('tcbs')">4. TCBS API</button>
+<button onclick="t('dnse')">5. DNSE Entrade</button>
+<button onclick="t('kbs')">6. KBS Securities</button>
+<button onclick="t('ssi')">7. SSI iBoard</button>
+<button onclick="t('vci')">8. VCI API</button>
+<button onclick="runAll()">▶▶ CHẠY TẤT CẢ</button>
+<div id="log">Bấm từng nút để test...\n</div>
+
+<script>
+const el=document.getElementById('log');
+function log(msg,cls=''){
+  const s=document.createElement('span');
+  if(cls)s.className=cls;
+  s.textContent=msg+'\n';
+  el.appendChild(s);el.scrollTop=el.scrollHeight;
+}
+function sep(t){log('');log('── '+t+' ──','info');}
+
+const TESTS={
+  yahoo1:async()=>{
+    sep('Yahoo Finance query1');
+    const r=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/ACB.VN?interval=1d&range=5d');
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    const d=await r.json();
+    const price=d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    log('regularMarketPrice: '+price,price?'ok':'err');
+    log('Full meta: '+JSON.stringify(d?.chart?.result?.[0]?.meta).slice(0,200));
+  },
+  yahoo2:async()=>{
+    sep('Yahoo Finance query2');
+    const r=await fetch('https://query2.finance.yahoo.com/v8/finance/chart/ACB.VN?interval=1d&range=5d');
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    const d=await r.json();
+    const price=d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    log('regularMarketPrice: '+price,price?'ok':'err');
+  },
+  stooq:async()=>{
+    sep('Stooq.com');
+    const r=await fetch('https://stooq.com/q/d/l/?s=acb.vn&i=d');
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    const txt=await r.text();
+    log('Response (200 chars): '+txt.slice(0,200),txt.includes(',')?'ok':'warn');
+  },
+  tcbs:async()=>{
+    sep('TCBS API');
+    const to=Math.floor(Date.now()/1000)+86400;
+    const r=await fetch(`https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=ACB&type=stock&resolution=D&to=${to}&countBack=3`);
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    if(r.ok){const d=await r.json();log('data[0]: '+JSON.stringify(d?.data?.[0]),'ok');}
+  },
+  dnse:async()=>{
+    sep('DNSE Entrade');
+    const to=Math.floor(Date.now()/1000)+86400,fr=to-10*86400;
+    const r=await fetch(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fr}&to=${to}&symbol=ACB&resolution=D`);
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    if(r.ok){const d=await r.json();log('closes: '+JSON.stringify(d?.c?.slice(-3)),'ok');}
+  },
+  kbs:async()=>{
+    sep('KBS Securities');
+    const r=await fetch('https://api.kbsec.com.vn/api/chart/history?symbol=ACB&resolution=D&from=20250301&to=20250320');
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    if(r.ok){const d=await r.json();log('closes: '+JSON.stringify(d?.c?.slice(-3)),'ok');}
+  },
+  ssi:async()=>{
+    sep('SSI iBoard');
+    const r=await fetch('https://iboard-query.ssi.com.vn/v2/stock/historical-price/ACB/1D/5/1',
+      {headers:{Referer:'https://iboard.ssi.com.vn',Origin:'https://iboard.ssi.com.vn'}});
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    if(r.ok){const d=await r.json();log('data: '+JSON.stringify(d).slice(0,150),'ok');}
+  },
+  vci:async()=>{
+    sep('VCI API');
+    const r=await fetch('https://api.vci.com.vn/api/pt/kline?symbol=ACB&resolution=D&from=2025-03-01&to=2025-03-20');
+    log('HTTP: '+r.status,r.ok?'ok':'err');
+    if(r.ok){const d=await r.json();log('c: '+JSON.stringify(d?.c?.slice(-3)),'ok');}
+  },
+};
+
+async function t(name){
+  el.innerHTML='';
+  log('Test: '+name+' — '+new Date().toLocaleTimeString('vi-VN'),'info');
+  try{
+    await TESTS[name]();
+    log('✅ DONE','ok');
+  }catch(e){
+    log('❌ LỖI: '+e.message,'err');
+  }
+}
+
+async function runAll(){
+  el.innerHTML='';
+  log('=== CHẠY TẤT CẢ '+new Date().toLocaleTimeString('vi-VN')+' ===','info');
+  const results={};
+  for(const [name,fn] of Object.entries(TESTS)){
+    log('');log('── '+name+' ──','info');
+    try{
+      await fn();
+      results[name]='✅ OK';
+      log('→ PASS','ok');
+    }catch(e){
+      results[name]='❌ '+e.message;
+      log('→ FAIL: '+e.message,'err');
+    }
+  }
+  log('');log('=== KẾT QUẢ ===','info');
+  for(const [k,v] of Object.entries(results)){
+    log(k+': '+v, v.startsWith('✅')?'ok':'err');
+  }
+}
+</script>
+
+</body>
+</html>
