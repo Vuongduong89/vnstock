@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debug v12 — Worker Fix</title>
+<style>
+body{background:#070c12;color:#e0eaf4;font-family:monospace;padding:14px;font-size:12px}
+h2{color:#00c8ff;margin-bottom:4px;font-size:14px}
+.sub{color:#3d5a78;font-size:10px;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+button{background:#0d1720;color:#e0eaf4;border:1px solid #1a2d42;border-radius:8px;
+  padding:10px 8px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;line-height:1.3}
+button:active{opacity:.7}
+button.ok{border-color:#00e096;color:#00e096}
+button.err{border-color:#ff4560;color:#ff4560}
+button.run{background:#0077aa;color:#fff;border-color:#0077aa;grid-column:1/-1;text-align:center;font-size:13px;padding:12px}
+#log{background:#0d1720;border:1px solid #1a2d42;border-radius:8px;padding:10px;
+  white-space:pre-wrap;word-break:break-all;height:52vh;overflow-y:auto;font-size:11px;line-height:1.6}
+.ok{color:#00e096}.err{color:#ff4560}.info{color:#60a5fa}.warn{color:#f0b429}.sep{color:#3d5a78}
+</style>
+</head>
+<body>
+<h2>🔧 Debug v12 — Worker URL Fix</h2>
+<div class="sub">⚠️ Cần cập nhật Worker code trước! Xem hướng dẫn bên dưới.</div>
+<div class="grid">
+  <button id="b1" onclick="t('worker')">🌐 1. Worker Ping<br><span style="opacity:.6;font-weight:400">Kiểm tra worker live</span></button>
+  <button id="b2" onclick="t('tcbs')">📊 2. TCBS API<br><span style="opacity:.6;font-weight:400">bars-long-term ACB</span></button>
+  <button id="b3" onclick="t('ssi')">📊 3. SSI iBoard<br><span style="opacity:.6;font-weight:400">historical-price ACB</span></button>
+  <button id="b4" onclick="t('dnse')">📊 4. DNSE (fix)<br><span style="opacity:.6;font-weight:400">entrade.com.vn ACB</span></button>
+  <button id="b5" onclick="t('vnd')">🆕 5. VNDirect<br><span style="opacity:.6;font-weight:400">finfo-api.vndirect.com.vn</span></button>
+  <button id="b6" onclick="t('fireant')">🆕 6. FireAnt<br><span style="opacity:.6;font-weight:400">restv2.fireant.vn</span></button>
+  <button class="run" onclick="runAll()">▶▶ CHẠY TẤT CẢ</button>
+</div>
+<div id="log">Bấm CHẠY TẤT CẢ...
+</div>
+
+<script>
+const PROXY = 'https://vnstock.monosake02.workers.dev/?url=';
+const el = document.getElementById('log');
+function log(msg, cls='') {
+  const s = document.createElement('span');
+  if(cls) s.className = cls;
+  s.textContent = msg + '\n';
+  el.appendChild(s); el.scrollTop = el.scrollHeight;
+}
+function setBtn(id, state) {
+  const b = document.getElementById('b'+id);
+  if(!b) return;
+  b.classList.remove('ok','err');
+  if(state) b.classList.add(state);
+}
+
+// Proxy fetch — hiện URL thực gọi
+async function pf(targetUrl) {
+  const fullUrl = PROXY + encodeURIComponent(targetUrl);
+  log('→ Worker: ' + targetUrl.slice(0,70)+'...', 'sep');
+  const r = await fetch(fullUrl);
+  const hdrs = Object.fromEntries([...r.headers.entries()]);
+  log('HTTP: ' + r.status + ' | x-proxy: '+hdrs['x-proxy-status']+'| x-target: '+hdrs['x-target-url'], r.ok?'ok':'err');
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  const txt = await r.text();
+  log('Size: '+txt.length+'b | '+txt.slice(0,100), 'sep');
+  if(txt.length < 5) throw new Error('empty response');
+  return JSON.parse(txt);
+}
+
+const TESTS = {
+  worker: async() => {
+    const r = await fetch('https://vnstock.monosake02.workers.dev//?test=1');
+    log('HTTP: '+r.status, 'info');
+    const t = await r.text();
+    log('Body: '+t.slice(0,100), r.status<500?'ok':'warn');
+  },
+  tcbs: async() => {
+    const to = Math.floor(Date.now()/1000)+86400;
+    const d = await pf(`https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=ACB&type=stock&resolution=D&to=${to}&countBack=5`);
+    const bars = d?.data||[];
+    log('Bars: '+bars.length, bars.length>0?'ok':'err');
+    if(bars.length>0) {
+      const last = bars[bars.length-1];
+      log('Close: '+(last.close*1000).toLocaleString('vi-VN')+'đ | date: '+last.tradingDate, 'ok');
+    }
+  },
+  ssi: async() => {
+    const d = await pf('https://iboard-query.ssi.com.vn/v2/stock/historical-price/ACB/1D/25/1');
+    const bars = d?.data||d?.items||[];
+    log('Bars: '+bars.length, bars.length>0?'ok':'err');
+    if(bars.length>0) {
+      const last = bars[bars.length-1];
+      log('Keys: '+Object.keys(last).slice(0,8).join(', '), 'sep');
+      const price = last.c||last.close;
+      log('Close: '+(price*1000).toLocaleString('vi-VN')+'đ', 'ok');
+    }
+  },
+  dnse: async() => {
+    const to = Math.floor(Date.now()/1000)+86400, fr=to-60*86400;
+    const d = await pf(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fr}&to=${to}&symbol=ACB&resolution=D`);
+    log('Keys: '+Object.keys(d).join(', '), 'sep');
+    const c = (d.c||[]).filter(x=>x>0);
+    log('Valid closes: '+c.length, c.length>1?'ok':'err');
+    if(c.length>0) log('Close: '+(c[c.length-1]*1000).toLocaleString('vi-VN')+'đ | nextTime: '+(d.nextTime||'null'), 'ok');
+    else log('⚠️ c array all null — DNSE trả rỗng ngoài giờ GD hoặc cần header khác', 'warn');
+  },
+  vnd: async() => {
+    const toDate = new Date(Date.now()+86400000).toISOString().split('T')[0];
+    const frDate = new Date(Date.now()-30*86400000).toISOString().split('T')[0];
+    const d = await pf(`https://finfo-api.vndirect.com.vn/v4/stock-prices?code=ACB&fromDate=${frDate}&toDate=${toDate}&sort=date&size=5`);
+    const items = d?.data||[];
+    log('Items: '+items.length, items.length>0?'ok':'err');
+    if(items.length>0) {
+      log('Keys: '+Object.keys(items[0]).slice(0,8).join(', '), 'sep');
+      const last = items[items.length-1];
+      log('Close: '+(last.close||last.adClose||'?')+'đ | date: '+last.date, 'ok');
+    }
+  },
+  fireant: async() => {
+    const toDate = new Date(Date.now()+86400000).toISOString().split('T')[0];
+    const frDate = new Date(Date.now()-10*86400000).toISOString().split('T')[0];
+    const d = await pf(`https://restv2.fireant.vn/symbols/ACB/historical-quotes?startDate=${frDate}&endDate=${toDate}&offset=0&limit=5`);
+    const arr = Array.isArray(d)?d:(d?.data||[]);
+    log('Items: '+arr.length, arr.length>0?'ok':'err');
+    if(arr.length>0) {
+      log('Keys: '+Object.keys(arr[0]).slice(0,8).join(', '), 'sep');
+      log('priceClose: '+arr[0].priceClose+'đ | date: '+arr[0].date, 'ok');
+    }
+  },
+};
+
+const KEYS=[['worker',1],['tcbs',2],['ssi',3],['dnse',4],['vnd',5],['fireant',6]];
+
+async function t(name) {
+  el.innerHTML='';
+  const pair=KEYS.find(k=>k[0]===name);
+  log('=== '+name.toUpperCase()+' === '+new Date().toLocaleTimeString('vi-VN'), 'info');
+  try{
+    await TESTS[name]();
+    log('✅ PASS','ok');
+    if(pair) setBtn(pair[1],'ok');
+  }catch(e){
+    log('❌ '+e.message,'err');
+    if(pair) setBtn(pair[1],'err');
+  }
+}
+
+async function runAll(){
+  el.innerHTML='';
+  log('=== CHẠY TẤT CẢ === '+new Date().toLocaleTimeString('vi-VN'),'info');
+  log('Proxy: '+PROXY, 'sep');
+  const res={};
+  for(const [name,id] of KEYS){
+    log('\n── '+name+' ──','info');
+    try{
+      await TESTS[name]();
+      res[name]='✅'; setBtn(id,'ok'); log('→ PASS','ok');
+    }catch(e){
+      res[name]='❌ '+e.message; setBtn(id,'err'); log('→ FAIL: '+e.message,'err');
+    }
+  }
+  log('\n════ KẾT QUẢ ════','info');
+  let pass=0;
+  for(const [k,v] of Object.entries(res)){
+    log(k.padEnd(10)+': '+v, v.startsWith('✅')?'ok':'err');
+    if(v.startsWith('✅')) pass++;
+  }
+  log('\nPASS: '+pass+'/'+KEYS.length, pass>0?'ok':'err');
+}
+</script>
+
+</body>
+</html>
