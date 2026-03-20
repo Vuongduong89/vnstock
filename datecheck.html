@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quick Check — Ngày giá</title>
+<style>
+body{background:#070c12;color:#e0eaf4;font-family:monospace;padding:14px;font-size:13px}
+h2{color:#00c8ff;margin-bottom:8px}
+button{background:#0077aa;color:#fff;border:none;border-radius:10px;
+  padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;margin-bottom:8px}
+button:active{opacity:.7}
+#log{background:#0d1720;border:1px solid #1a2d42;border-radius:10px;padding:12px;
+  font-size:12px;line-height:1.8;white-space:pre-wrap;word-break:break-all}
+.ok{color:#00e096}.err{color:#ff4560}.info{color:#60a5fa}.sep{color:#3d5a78}
+.big{font-size:16px;font-weight:700}
+</style>
+</head>
+<body>
+<h2>📅 Kiểm tra ngày giá CafeF</h2>
+<button onclick="check()">🔍 KIỂM TRA NGÀY GIÁ — ACB, TCB, VCB</button>
+<div id="log">Bấm để kiểm tra ngày dữ liệu CafeF trả về...</div>
+
+<script>
+const PROXY = 'https://vnstock.monosake02.workers.dev/?url=';
+const el = document.getElementById('log');
+function log(msg, cls='') {
+  const s = document.createElement('span');
+  if(cls) s.className = cls;
+  s.textContent = msg + '\n';
+  el.appendChild(s);
+}
+
+async function checkTicker(ticker) {
+  const url = `https://s.cafef.vn/Ajax/PageNew/DataHistory/PriceHistory.ashx?Symbol=${ticker}&StartDate=&EndDate=&PageIndex=1&PageSize=5`;
+  const r = await fetch(PROXY + encodeURIComponent(url));
+  const d = await r.json();
+  const rows = d?.Data?.Data || [];
+  
+  log('\n── ' + ticker + ' ──', 'info');
+  rows.forEach((row, i) => {
+    const price = parseFloat(row.GiaDieuChinh || row.GiaDongCua);
+    const priceVND = price >= 1000 ? Math.round(price) : Math.round(price * 1000);
+    const marker = i === 0 ? ' ← rows[0] = DÙNG LÀM GIÁ' : '';
+    log(`  [${i}] ${row.Ngay} | ${priceVND.toLocaleString('vi-VN')}đ${marker}`, i===0?'ok':'sep');
+  });
+}
+
+async function check() {
+  el.innerHTML = '';
+  const today = new Date().toLocaleDateString('vi-VN');
+  log('=== KIỂM TRA NGÀY GIÁ CAFEF ===', 'info');
+  log('Ngày thiết bị: ' + today + ' | ' + new Date().toLocaleTimeString('vi-VN'), 'info');
+  log('Kỳ vọng: rows[0].Ngay = hôm nay hoặc phiên giao dịch gần nhất', 'sep');
+  
+  try {
+    await checkTicker('ACB');
+    await checkTicker('TCB');
+    await checkTicker('VCB');
+    await checkTicker('SSI');
+    
+    log('\n=== KẾT LUẬN ===', 'info');
+    log('Nếu rows[0].Ngay = hôm nay → v14 sẽ lấy đúng giá hôm nay ✅', 'ok');
+    log('Nếu rows[0].Ngay = hôm qua → giá chậm 1 ngày (ngoài giờ GD)', 'sep');
+    log('Nếu rows[0].Ngay = 2 ngày trước → cuối tuần/nghỉ lễ', 'sep');
+  } catch(e) {
+    log('LỖI: ' + e.message, 'err');
+  }
+}
+</script>
+
+</body>
+</html>
