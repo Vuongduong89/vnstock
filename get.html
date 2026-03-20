@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Đăng nhập DNSE</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#070c12;color:#e0eaf4;font-family:-apple-system,sans-serif;padding:20px;min-height:100vh}
+h2{color:#00c8ff;margin-bottom:6px;font-size:20px}
+.sub{color:#3d5a78;font-size:12px;margin-bottom:20px;line-height:1.6}
+.card{background:#0d1720;border:1px solid #1a2d42;border-radius:14px;padding:18px;margin-bottom:14px}
+.card h3{color:#f0b429;font-size:12px;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}
+label{font-size:12px;color:#6a90b0;display:block;margin-bottom:5px;margin-top:2px}
+input{width:100%;background:#121d2b;border:1px solid #1a2d42;border-radius:10px;
+  padding:13px 14px;color:#e0eaf4;font-size:16px;margin-bottom:12px;outline:none;
+  -webkit-appearance:none;-webkit-text-size-adjust:100%}
+input:focus{border-color:#00c8ff}
+input[type=tel]{letter-spacing:1px}
+input[type=number]{letter-spacing:3px;font-size:20px;text-align:center}
+button{width:100%;background:linear-gradient(135deg,#0077aa,#1a4bcc);color:#fff;
+  border:none;border-radius:11px;padding:14px;font-size:15px;font-weight:700;
+  cursor:pointer;margin-bottom:8px}
+button:active{opacity:.8}
+button:disabled{opacity:.4;pointer-events:none}
+button.sec{background:#0d1720;border:1px solid #1a2d42;color:#6a90b0;font-weight:500;font-size:13px}
+.step{display:none}
+.step.active{display:block}
+#log{background:#121d2b;border:1px solid #1a2d42;border-radius:10px;padding:10px;
+  font-family:monospace;font-size:11px;line-height:1.6;max-height:150px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-all;margin-bottom:12px;display:none}
+.ok{color:#00e096}.err{color:#ff4560}.info{color:#60a5fa}.warn{color:#f0b429}
+.token-box{background:#121d2b;border:2px solid #00e096;border-radius:12px;
+  padding:14px;font-family:monospace;font-size:10px;word-break:break-all;color:#00e096;
+  margin-bottom:12px;line-height:1.6}
+.badge{display:inline-block;background:rgba(0,224,150,.1);color:#00e096;
+  border:1px solid rgba(0,224,150,.3);border-radius:20px;padding:3px 10px;font-size:11px;margin-bottom:10px}
+.note{font-size:11px;color:#3d5a78;text-align:center;line-height:1.5;margin-top:6px}
+.spinner{display:inline-block;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<h2>🔐 Đăng nhập DNSE</h2>
+<p class="sub">Lấy token để app VNStock dùng giá realtime.<br>Chỉ cần số điện thoại + mã OTP SMS — <strong>không cần mật khẩu</strong>.</p>
+
+<!-- STEP 1: Nhập SĐT -->
+
+<div class="step active" id="step1">
+  <div class="card">
+    <h3>Bước 1 — Nhập số điện thoại</h3>
+    <label>Số điện thoại đăng ký DNSE (Entrade)</label>
+    <input type="tel" id="phone" placeholder="0912345678" maxlength="10">
+    <button id="btn-otp" onclick="sendOTP()">📱 Gửi mã OTP</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<!-- STEP 2: Nhập OTP -->
+
+<div class="step" id="step2">
+  <div class="card">
+    <h3>Bước 2 — Nhập mã OTP</h3>
+    <p style="font-size:13px;color:#6a90b0;margin-bottom:12px">Mã OTP vừa được gửi đến <strong id="phone-display" style="color:#e0eaf4"></strong></p>
+    <label>Mã OTP (6 số)</label>
+    <input type="number" id="otp" placeholder="123456" maxlength="6" oninput="if(this.value.length>6)this.value=this.value.slice(0,6)">
+    <button id="btn-verify" onclick="verifyOTP()">✅ Xác nhận & Lấy Token</button>
+    <button class="sec" onclick="goBack()">← Nhập lại SĐT</button>
+  </div>
+  <div id="log2" style="display:none;background:#121d2b;border:1px solid #1a2d42;border-radius:10px;padding:10px;font-family:monospace;font-size:11px;line-height:1.6;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin-bottom:12px"></div>
+</div>
+
+<!-- STEP 3: Token -->
+
+<div class="step" id="step3">
+  <div class="card">
+    <div class="badge">✅ Đăng nhập thành công</div>
+    <h3>Token DNSE của bạn</h3>
+    <p style="font-size:12px;color:#6a90b0;margin-bottom:10px">Copy token bên dưới rồi gửi cho Claude:</p>
+    <div class="token-box" id="token-display"></div>
+    <button onclick="copyToken()" style="background:#00e096;color:#070c12">📋 Copy Token</button>
+    <button class="sec" style="margin-top:6px" onclick="copyShort()">📋 Copy An toàn (che giữa)</button>
+    <p class="note">⚠️ Xoá file gettoken.html khỏi GitHub ngay sau khi dùng xong<br>Token có giá trị ~24h, sau đó cần lấy lại</p>
+  </div>
+</div>
+
+<script>
+const el = document.getElementById('log');
+let savedPhone = '', savedToken = '';
+
+// API endpoints DNSE
+const DNSE_BASE = 'https://services.entrade.com.vn';
+
+function showLog(msg, cls='') {
+  el.style.display='block';
+  const s=document.createElement('span');
+  if(cls)s.className=cls;
+  s.textContent=msg+'\n';
+  el.appendChild(s);
+  el.scrollTop=el.scrollHeight;
+}
+function log2(msg, cls='') {
+  const l=document.getElementById('log2');
+  l.style.display='block';
+  const s=document.createElement('span');
+  if(cls)s.className=cls;
+  s.textContent=msg+'\n';
+  l.appendChild(s);
+  l.scrollTop=l.scrollHeight;
+}
+
+async function sendOTP() {
+  const phone = document.getElementById('phone').value.trim().replace(/^0/,'84');
+  if(!phone || phone.length < 9) {
+    showLog('⚠️ Nhập đúng số điện thoại', 'err');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-otp');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner">⟳</span> Đang gửi OTP...';
+  el.innerHTML = '';
+  
+  showLog('Gửi OTP đến +' + phone + '...', 'info');
+  
+  const tries = [
+    {url: DNSE_BASE+'/dnse-user-service/api/send-otp', body: {loginName: '0'+phone.slice(2), type:'SIGN_IN'}},
+    {url: DNSE_BASE+'/dnse-user-service/api/otp', body: {phone: '0'+phone.slice(2), type:'login'}},
+    {url: DNSE_BASE+'/dnse-user-service/send-otp', body: {phoneNumber: '0'+phone.slice(2)}},
+    {url: 'https://api.entrade.com.vn/auth/otp', body: {phone: '0'+phone.slice(2), action:'login'}},
+  ];
+  
+  let sent = false;
+  for(const t of tries) {
+    showLog('→ '+t.url.replace(DNSE_BASE,'').split('/').slice(0,4).join('/'), 'info');
+    try {
+      const r = await fetch(t.url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json',
+                 'Origin':'https://banggia.dnse.com.vn','Referer':'https://banggia.dnse.com.vn/'},
+        body: JSON.stringify(t.body)
+      });
+      showLog('HTTP: '+r.status, r.ok||r.status===201?'ok':'warn');
+      const txt = await r.text();
+      showLog('Response: '+txt.slice(0,150), 'info');
+      
+      if(r.ok || r.status===201 || r.status===200) {
+        sent = true;
+        savedPhone = '0'+phone.slice(2);
+        showLog('✅ OTP đã gửi! Kiểm tra SMS', 'ok');
+        break;
+      }
+    } catch(e) {
+      showLog('Lỗi: '+e.message, 'err');
+    }
+  }
+  
+  if(sent) {
+    document.getElementById('phone-display').textContent = savedPhone;
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step2').classList.add('active');
+  } else {
+    showLog('\n⚠️ Không gửi được OTP. DNSE có thể đã thay đổi API.', 'warn');
+    showLog('→ Thử đăng nhập trực tiếp tại banggia.dnse.com.vn rồi dùng DevTools', 'warn');
+    btn.disabled = false;
+    btn.innerHTML = '📱 Gửi lại OTP';
+  }
+}
+
+async function verifyOTP() {
+  const otp = document.getElementById('otp').value.trim();
+  if(!otp || otp.length < 6) {
+    log2('⚠️ Nhập đủ 6 số OTP', 'err');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-verify');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner">⟳</span> Đang xác nhận...';
+  document.getElementById('log2').innerHTML='';
+  
+  log2('Xác nhận OTP: '+otp, 'info');
+  
+  const tries = [
+    {url: DNSE_BASE+'/dnse-user-service/api/sign-in-otp',
+     body: {loginName: savedPhone, otp: otp, type:'SIGN_IN'}},
+    {url: DNSE_BASE+'/dnse-user-service/api/verify-otp',
+     body: {phone: savedPhone, otp: otp}},
+    {url: DNSE_BASE+'/dnse-user-service/verify-otp',
+     body: {phoneNumber: savedPhone, otp: otp}},
+    {url: 'https://api.entrade.com.vn/auth/verify-otp',
+     body: {phone: savedPhone, otp: otp, action:'login'}},
+  ];
+  
+  for(const t of tries) {
+    log2('→ '+t.url.replace(DNSE_BASE,'').split('/').slice(0,4).join('/'), 'info');
+    try {
+      const r = await fetch(t.url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json',
+                 'Origin':'https://banggia.dnse.com.vn','Referer':'https://banggia.dnse.com.vn/'},
+        body: JSON.stringify(t.body)
+      });
+      log2('HTTP: '+r.status, r.ok?'ok':'warn');
+      const txt = await r.text();
+      log2('Response: '+txt.slice(0,300), 'info');
+      
+      if(r.ok) {
+        const d = JSON.parse(txt);
+        const token = d?.token||d?.access_token||d?.accessToken||
+                     d?.data?.token||d?.data?.access_token||d?.jwt;
+        if(token) {
+          savedToken = token;
+          showResult(token);
+          return;
+        }
+        log2('Keys: '+Object.keys(d).join(', '), 'warn');
+      }
+    } catch(e) {
+      log2('Lỗi: '+e.message, 'err');
+    }
+  }
+  
+  log2('\n⚠️ API DNSE đã thay đổi. Gửi ảnh log này cho Claude.', 'warn');
+  btn.disabled = false;
+  btn.innerHTML = '✅ Thử lại';
+}
+
+function showResult(token) {
+  document.getElementById('step2').classList.remove('active');
+  document.getElementById('step3').classList.add('active');
+  // Hiển thị token che giữa
+  const safe = token.slice(0,40)+'...'+token.slice(-40);
+  document.getElementById('token-display').textContent = safe;
+}
+
+function copyToken() {
+  if(!savedToken) return;
+  if(navigator.clipboard) {
+    navigator.clipboard.writeText(savedToken).then(()=>alert('✅ Đã copy token đầy đủ!\nGửi cho Claude để tích hợp vào app.'));
+  } else {
+    const ta=document.createElement('textarea');
+    ta.value=savedToken;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    alert('✅ Đã copy!');
+  }
+}
+
+function copyShort() {
+  const safe = savedToken.slice(0,40)+'...[MIDDLE]...'+savedToken.slice(-40);
+  if(navigator.clipboard) {
+    navigator.clipboard.writeText(safe).then(()=>alert('✅ Đã copy (phiên bản an toàn).'));
+  }
+}
+
+function goBack() {
+  document.getElementById('step2').classList.remove('active');
+  document.getElementById('step1').classList.add('active');
+  document.getElementById('btn-otp').disabled=false;
+  document.getElementById('btn-otp').innerHTML='📱 Gửi mã OTP';
+}
+</script>
+
+</body>
+</html>
